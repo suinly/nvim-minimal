@@ -1,0 +1,9 @@
+os:
+  editPreset: nvim-remote
+  edit: 'nvim --server "$NVIM" --remote-expr ''execute("stopinsert | close")'' && nvim --server "$NVIM" --remote {{filename}}'
+  editAtLine: 'nvim --server "$NVIM" --remote-expr ''execute("stopinsert | close")'' && nvim --server "$NVIM" --remote {{filename}} && nvim --server "$NVIM" --remote-send ":{{line}}<CR>"'
+customCommands:
+  - key: q
+    context: global
+    description: Hide LazyGit
+    command: 'nvim --server "$NVIM" --remote-expr ''execute("stopinsert | close")'''

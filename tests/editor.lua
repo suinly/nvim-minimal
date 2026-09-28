@@ -43,9 +43,12 @@ vim.fn.delete(path)
 vim.lsp.get_clients, vim.lsp.buf.format = get_clients, format
 local jobstart = vim.fn.jobstart
 local terminal, on_exit
+local origin_win = vim.api.nvim_get_current_win()
 local win_count = #vim.api.nvim_tabpage_list_wins(0)
 vim.fn.jobstart = function(command, opts)
   assert(command[1] == "lazygit" and opts.term)
+  assert(command[2] == "--use-config-file", "LazyGit must load the Neovim editor preset")
+  assert(command[3]:find(vim.fn.stdpath("config") .. "/lazygit.yml", 1, true))
   terminal, on_exit = vim.api.nvim_get_current_buf(), opts.on_exit
   return 1
 end
@@ -91,12 +94,15 @@ for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) d
   assert(resized and vim.api.nvim_get_current_buf() == terminal)
 end
 for _, win in ipairs(windows) do assert(vim.api.nvim_win_is_valid(win)) end
--- A buffer change can wipe the terminal before the scheduled exit callback.
-vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(false, true))
-assert(not vim.api.nvim_buf_is_valid(terminal))
+vim.api.nvim_win_close(0, true)
+assert(vim.api.nvim_buf_is_valid(terminal), "Closing the window must preserve LazyGit")
+vim.fn.maparg("<Space>gg", "n", false, true).callback()
+assert(vim.api.nvim_get_current_buf() == terminal, "LazyGit must reuse its terminal")
 on_exit()
 assert(vim.wait(1000, function() return #vim.api.nvim_tabpage_list_wins(0) == win_count end))
 assert(#vim.api.nvim_tabpage_list_wins(0) == win_count)
+assert(not vim.api.nvim_buf_is_valid(terminal))
+assert(vim.api.nvim_get_current_win() == origin_win)
 vim.fn.jobstart = jobstart
 vim.cmd.stopinsert()
 local active = vim.api.nvim_get_current_buf()
