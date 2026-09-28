@@ -153,6 +153,7 @@ statuscolumn.setup({
   dim_inactive = false,
   content = statuscolumn.gen_content.main({
     { format = "=lfs", sep = "" },
+    { pos = "cursor", lnum = "%{&number ? v:lnum : (&relativenumber ? 0 : '')}" },
     { ltype = "virt", lnum = "•" },
     { ltype = "wrap", lnum = "↳" },
   }),
