@@ -21,4 +21,36 @@ MiniStarter.open()
 vim.wait(100)
 local reopened = color()
 assert(vim.wait(1000, function() return color() ~= reopened end), "Animation must restart on return")
-print("Starter animation checks passed")
+local cwd, oldfiles = vim.fn.getcwd(), vim.v.oldfiles
+local directory = vim.fn.tempname()
+vim.fn.mkdir(directory, "p")
+directory = vim.uv.fs_realpath(directory)
+local paths = {
+  directory .. "/" .. string.rep("long-name-", 8) .. ".txt",
+  directory .. "/" .. string.rep("界", 35) .. ".txt",
+  directory .. "/short.txt",
+}
+for _, path in ipairs(paths) do vim.fn.writefile({ "test" }, path) end
+vim.cmd.cd(vim.fn.fnameescape(directory))
+vim.v.oldfiles = paths
+MiniStarter.open()
+local recent = {}
+for _, row in ipairs(MiniStarter.get_content()) do
+  for _, unit in ipairs(row) do
+    if unit.type == "item" and unit.item.section == "Recent files (current directory)" then
+      assert(vim.fn.strdisplaywidth(unit.string) <= 60, "Recent file labels must not widen Starter")
+      recent[#recent + 1] = unit.item
+    end
+  end
+end
+assert(#recent == 3)
+for index = 1, 2 do
+  assert(recent[index].name:sub(-#"…") == "…", "Long labels must end with an ellipsis")
+  recent[index].action()
+  assert(vim.uv.fs_realpath(vim.api.nvim_buf_get_name(0)) == vim.uv.fs_realpath(paths[index]), "Truncated labels must open the full file path")
+end
+assert(recent[3].name == "short.txt (short.txt)", "Short labels must remain unchanged")
+vim.cmd.cd(vim.fn.fnameescape(cwd))
+vim.v.oldfiles = oldfiles
+vim.fn.delete(directory, "rf")
+print("Starter animation and filename checks passed")

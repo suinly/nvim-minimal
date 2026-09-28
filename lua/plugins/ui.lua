@@ -65,6 +65,18 @@ starter.setup({
   content_hooks = {
     function(content)
       for row = 1, 3 do content[row][1].hl = "StarterLogo" end
+      for _, row in ipairs(content) do
+        for _, unit in ipairs(row) do
+          if unit.type == "item" and unit.item.section == "Recent files (current directory)"
+            and vim.fn.strdisplaywidth(unit.string) > 60 then
+            local label = vim.fn.strcharpart(unit.string, 0, 59)
+            while vim.fn.strdisplaywidth(label) > 59 do
+              label = vim.fn.strcharpart(label, 0, vim.fn.strchars(label) - 1)
+            end
+            unit.string = label .. "…"
+          end
+        end
+      end
       return content
     end,
     starter.gen_hook.adding_bullet("· "),

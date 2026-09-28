@@ -1,6 +1,7 @@
 vim.opt.relativenumber = true
 vim.opt.swapfile = false
 vim.opt.scrolloff = 5
+vim.opt.wrap = true
 vim.opt.clipboard = "unnamedplus"
 vim.opt.cmdheight = 0
 
