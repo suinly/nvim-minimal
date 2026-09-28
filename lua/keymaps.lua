@@ -7,7 +7,19 @@ keymap({ "n", "x" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "LSP code a
 
 keymap("n", "<space>", "<Nop>")
 
-keymap("n", "<leader>e", "<cmd>lua MiniFiles.open()<CR>", { desc = "File explorer" })
+local function project_root()
+  local path = vim.bo.buftype == "" and vim.api.nvim_buf_get_name(0) or ""
+  local start = path ~= "" and path or vim.fn.getcwd()
+  return vim.fs.root(start, ".git") or vim.fs.root(start, { "Cargo.toml", "package.json", "pyproject.toml" }) or vim.fn.getcwd()
+end
+keymap("n", "<leader>e", function()
+  local path = vim.api.nvim_buf_get_name(0)
+  local target = vim.bo.buftype == "" and vim.fn.filereadable(path) == 1 and path or project_root()
+  MiniFiles.open(target, false)
+end, { desc = "File explorer" })
+keymap("n", "<leader>E", function()
+  MiniFiles.open(project_root(), false)
+end, { desc = "Project explorer" })
 keymap("n", "<leader>w", "<cmd>w!<CR>", { desc = "Save file" })
 keymap("n", "<leader>r", "<cmd>restart<CR>", { desc = "Restart Neovim" })
 
@@ -78,7 +90,7 @@ keymap("n", "<leader>gg", function()
     keymap("t", "<C-" .. key .. ">", function()
       require("herdr-splits")["move_cursor_" .. direction]()
     end, { buffer = buf, desc = "Herdr: " .. direction })
-    keymap("t", "<M-" .. key .. ">", function()
+    keymap("t", "<C-M-" .. key .. ">", function()
       require("herdr-splits")["resize_" .. direction]()
     end, { buffer = buf, desc = "Herdr resize: " .. direction })
   end
@@ -112,5 +124,10 @@ keymap("n", "<C-h>", "<cmd> lua require('herdr-splits').move_cursor_left()<CR>")
 keymap("n", "<C-j>", "<cmd> lua require('herdr-splits').move_cursor_down()<CR>")
 keymap("n", "<C-k>", "<cmd> lua require('herdr-splits').move_cursor_up()<CR>")
 keymap("n", "<C-l>", "<cmd> lua require('herdr-splits').move_cursor_right()<CR>")
+for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) do
+  keymap("n", "<C-M-" .. key .. ">", function()
+    require("herdr-splits")["resize_" .. direction]()
+  end, { desc = "Herdr resize: " .. direction })
+end
 
 keymap("n", "<leader>q", "<cmd>q<CR>", { desc = "Close window" })

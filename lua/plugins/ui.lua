@@ -126,10 +126,23 @@ vim.api.nvim_create_autocmd("User", {
   pattern = "MiniStarterOpened",
   group = vim.api.nvim_create_augroup("StarterNavigation", { clear = true }),
   callback = function(event)
+    if vim.bo[event.buf].filetype ~= "ministarter" then return end
     vim.o.showtabline = 2
     starter.refresh(event.buf)
     vim.keymap.set("n", "j", function() starter.update_current_item("next") end, { buffer = event.buf })
     vim.keymap.set("n", "k", function() starter.update_current_item("prev") end, { buffer = event.buf })
+  end,
+})
+
+vim.api.nvim_create_autocmd("SessionLoadPost", {
+  group = vim.api.nvim_create_augroup("StarterSession", { clear = true }),
+  callback = function()
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      local buf = vim.api.nvim_win_get_buf(win)
+      if vim.api.nvim_buf_get_name(buf):match("^ministarter://") then
+        vim.api.nvim_win_call(win, function() starter.open(buf) end)
+      end
+    end
   end,
 })
 

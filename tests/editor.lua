@@ -3,6 +3,77 @@ assert(vim.o.scrolloff == 5)
 assert(vim.fn.maparg("<Space>fb", "n"):find("Pick buffers", 1, true))
 
 vim.cmd.enew()
+local backend = require("herdr-splits.herdr")
+local in_session, zoomed, resize_pane = backend.is_in_session, backend.current_pane_is_zoomed, backend.resize_pane
+backend.is_in_session = function() return false end
+for _, split in ipairs({ { "vsplit", "h", "l", vim.api.nvim_win_get_width }, { "split", "k", "j", vim.api.nvim_win_get_height } }) do
+  vim.cmd("topleft " .. split[1])
+  local size = split[4](0)
+  vim.fn.maparg("<C-M-" .. split[2] .. ">", "n", false, true).callback()
+  assert(split[4](0) < size, "Resize must shrink the Neovim split")
+  vim.fn.maparg("<C-M-" .. split[3] .. ">", "n", false, true).callback()
+  assert(split[4](0) == size, "Resize must grow the Neovim split")
+  vim.cmd.close()
+end
+backend.is_in_session = function() return true end
+backend.current_pane_is_zoomed = function() return false end
+for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) do
+  local called = false
+  backend.resize_pane = function(actual, amount)
+    assert(actual == direction and amount > 0)
+    called = true
+    return true
+  end
+  assert(require("herdr-splits.config").resize_keys[direction] == "ctrl+alt+" .. key)
+  vim.fn.maparg("<C-M-" .. key .. ">", "n", false, true).callback()
+  assert(called, "Resize must reach Herdr: " .. direction)
+end
+backend.is_in_session, backend.current_pane_is_zoomed, backend.resize_pane = in_session, zoomed, resize_pane
+
+local project = vim.fn.tempname()
+vim.fn.mkdir(project .. "/nested/src", "p")
+vim.fn.writefile({}, project .. "/.git")
+vim.fn.writefile({}, project .. "/nested/package.json")
+vim.fn.writefile({}, project .. "/nested/src/file.txt")
+vim.cmd.edit(vim.fn.fnameescape(project .. "/nested/src/file.txt"))
+local function check_explorer(key, path)
+  vim.fn.maparg(key, "n", false, true).callback()
+  assert(vim.uv.fs_realpath(MiniFiles.get_explorer_state().anchor) == vim.uv.fs_realpath(path))
+  MiniFiles.close()
+end
+check_explorer("<Space>e", project .. "/nested/src")
+local columns_before_preview = vim.o.columns
+vim.fn.maparg("<Space>e", "n", false, true).callback()
+for _, columns in ipairs({ 160, 100, 80 }) do
+  vim.o.columns = columns
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  local state = MiniFiles.get_explorer_state()
+  assert(#state.windows == 2, "MiniFiles preview must fit the terminal")
+  assert(vim.uv.fs_realpath(state.windows[2].path) == vim.uv.fs_realpath(project .. "/nested/src/file.txt"), "MiniFiles must preview the current file")
+end
+MiniFiles.close()
+vim.o.columns = columns_before_preview
+check_explorer("<Space>E", project)
+vim.cmd.edit(vim.fn.fnameescape(project .. "/nested/src/missing.txt"))
+check_explorer("<Space>e", project)
+local cwd = vim.fn.getcwd()
+vim.cmd.enew()
+vim.api.nvim_set_current_dir(project .. "/nested/src")
+check_explorer("<Space>e", project)
+check_explorer("<Space>E", project)
+vim.api.nvim_set_current_dir(cwd)
+vim.cmd.edit(vim.fn.fnameescape(project .. "/nested/src/missing.txt"))
+vim.fn.delete(project .. "/.git")
+check_explorer("<Space>E", project .. "/nested")
+check_explorer("<Space>e", project .. "/nested")
+vim.fn.delete(project .. "/nested/package.json")
+check_explorer("<Space>E", vim.fn.getcwd())
+vim.cmd.enew()
+check_explorer("<Space>e", vim.fn.getcwd())
+check_explorer("<Space>E", vim.fn.getcwd())
+vim.fn.delete(project, "rf")
+
+vim.cmd.enew()
 local buf = vim.api.nvim_get_current_buf()
 vim.cmd.vsplit()
 local windows = vim.api.nvim_tabpage_list_wins(0)
@@ -87,7 +158,7 @@ for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) d
     assert(actual_direction == direction and amount > 0)
     resized = true
   end
-  local resize_mapping = vim.fn.maparg("<M-" .. key .. ">", "t", false, true)
+  local resize_mapping = vim.fn.maparg("<C-M-" .. key .. ">", "t", false, true)
   assert(resize_mapping.buffer == 1, "Missing LazyGit resize mapping: " .. key)
   resize_mapping.callback()
   backend.resize_pane = resize_pane

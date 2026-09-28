@@ -1,6 +1,43 @@
 -- Run with nvim --headless -i NONE -u init.lua '+lua dofile("tests/starter.lua")' '+qa!'
 MiniStarter.open()
+local session = vim.fn.tempname() .. ".vim"
+vim.cmd.mksession({ session, bang = true })
+local result = vim.system({
+  vim.v.progpath, "--headless", "-i", "NONE", "-u", "init.lua", "-S", session,
+  "+lua local ok, err = pcall(function() assert(vim.bo.filetype == 'ministarter'); local row = vim.api.nvim_win_get_cursor(0)[1]; vim.fn.maparg('j', 'n', false, true).callback(); assert(vim.api.nvim_win_get_cursor(0)[1] > row); vim.fn.maparg('k', 'n', false, true).callback(); assert(vim.api.nvim_win_get_cursor(0)[1] == row) end); if not ok then print(err); vim.cmd('cquit') end",
+  "+qa!",
+}, { text = true }):wait()
+vim.fn.delete(session)
+assert(result.code == 0, "Restored Starter navigation must work: " .. (result.stderr or ""))
+local file = vim.fn.tempname() .. ".txt"
+vim.fn.writefile({ "first", "second", "third" }, file)
+vim.cmd.edit(vim.fn.fnameescape(file))
+vim.cmd.mksession({ session, bang = true })
+result = vim.system({
+  vim.v.progpath, "--headless", "-i", "NONE", "-u", "init.lua",
+  "+lua local ok, err = pcall(function() vim.api.nvim_exec_autocmds('VimEnter', {}); vim.cmd.source(" .. vim.inspect(session) .. "); vim.wait(100); assert(vim.fn.maparg('j', 'n', false, true).buffer ~= 1); assert(vim.fn.maparg('k', 'n', false, true).buffer ~= 1); vim.api.nvim_win_set_cursor(0, {1, 0}); vim.api.nvim_feedkeys('j', 'xt', false); assert(vim.api.nvim_win_get_cursor(0)[1] == 2); vim.api.nvim_feedkeys('k', 'xt', false); assert(vim.api.nvim_win_get_cursor(0)[1] == 1) end); if not ok then print(err); vim.cmd('cquit') end",
+  "+qa!",
+}, { text = true }):wait()
+vim.fn.delete(session)
+vim.fn.delete(file)
+assert(result.code == 0, "Restored file navigation must work: " .. (result.stderr or ""))
+MiniStarter.open()
 local buf = vim.api.nvim_get_current_buf()
+local backend = require("herdr-splits.herdr")
+local in_session, zoomed, resize_pane = backend.is_in_session, backend.current_pane_is_zoomed, backend.resize_pane
+backend.is_in_session = function() return true end
+backend.current_pane_is_zoomed = function() return false end
+for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) do
+  local called = false
+  backend.resize_pane = function(actual, amount)
+    assert(actual == direction and amount > 0)
+    called = true
+    return true
+  end
+  vim.fn.maparg("<C-M-" .. key .. ">", "n", false, true).callback()
+  assert(called, "Starter resize must reach Herdr: " .. direction)
+end
+backend.is_in_session, backend.current_pane_is_zoomed, backend.resize_pane = in_session, zoomed, resize_pane
 local function color() return vim.api.nvim_get_hl(0, { name = "StarterLogo", link = false }).fg end
 local initial = color()
 assert(vim.wait(1000, function() return color() ~= initial end), "Logo color must animate")

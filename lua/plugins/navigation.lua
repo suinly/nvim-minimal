@@ -28,6 +28,17 @@ clue.setup({
 -- Files
 vim.pack.add({ "https://github.com/nvim-mini/mini.files" })
 require("mini.files").setup({ windows = { preview = true, width_preview = 80 } })
+local function resize_files()
+  if not MiniFiles.get_explorer_state() then return end
+  local width_focus = math.min(50, math.max(1, math.floor((vim.o.columns - 4) / 2)))
+  MiniFiles.refresh({ windows = {
+    width_focus = width_focus,
+    width_preview = math.max(1, math.min(80, vim.o.columns - width_focus - 4)),
+  } })
+end
+local files_group = vim.api.nvim_create_augroup("MiniFilesLayout", { clear = true })
+vim.api.nvim_create_autocmd("User", { pattern = "MiniFilesExplorerOpen", group = files_group, callback = resize_files })
+vim.api.nvim_create_autocmd("VimResized", { group = files_group, callback = resize_files })
 
 -- Jump
 vim.pack.add({ "https://github.com/nvim-mini/mini.jump" })
@@ -45,4 +56,7 @@ require("mini.fuzzy").setup()
 
 -- Herdr
 vim.pack.add({ "https://github.com/lmilojevicc/herdr-splits.nvim" })
-require("herdr-splits").setup()
+require("herdr-splits").setup({
+  resize_keys = { left = "<C-M-h>", down = "<C-M-j>", up = "<C-M-k>", right = "<C-M-l>" },
+  ignored_buftypes = { "quickfix", "prompt", "help", "terminal" },
+})
