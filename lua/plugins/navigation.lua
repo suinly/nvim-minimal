@@ -27,7 +27,9 @@ clue.setup({
 
 -- Files
 vim.pack.add({ "https://github.com/nvim-mini/mini.files" })
-require("mini.files").setup({ windows = { preview = true, width_preview = 80 } })
+require("mini.files").setup({
+  windows = { preview = true, width_preview = 80 },
+})
 local function resize_files()
   if not MiniFiles.get_explorer_state() then return end
   local width_focus = math.min(50, math.max(1, math.floor((vim.o.columns - 4) / 2)))
@@ -37,6 +39,13 @@ local function resize_files()
   } })
 end
 local files_group = vim.api.nvim_create_augroup("MiniFilesLayout", { clear = true })
+vim.api.nvim_create_autocmd("User", {
+  pattern = "MiniFilesBufferCreate",
+  group = files_group,
+  callback = function(event)
+    vim.keymap.set("n", "<Esc>", MiniFiles.close, { buffer = event.data.buf_id, nowait = true, desc = "Close" })
+  end,
+})
 vim.api.nvim_create_autocmd("User", { pattern = "MiniFilesExplorerOpen", group = files_group, callback = resize_files })
 vim.api.nvim_create_autocmd("VimResized", { group = files_group, callback = resize_files })
 
