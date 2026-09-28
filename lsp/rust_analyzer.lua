@@ -5,4 +5,9 @@ return {
         "Cargo.toml",
         ".git",
     },
+    settings = {
+        ["rust-analyzer"] = {
+            check = { command = "clippy" },
+        },
+    },
 }

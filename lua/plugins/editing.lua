@@ -48,3 +48,15 @@ require("mini.cmdline").setup()
 -- Tailspace
 vim.pack.add({ "https://github.com/nvim-mini/mini.trailspace" })
 require("mini.trailspace").setup()
+
+-- Syntax highlighting
+vim.pack.add({ "https://github.com/nvim-treesitter/nvim-treesitter" })
+require("nvim-treesitter").setup()
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("LanguageHighlight", { clear = true }),
+  pattern = { "javascript", "javascriptreact", "typescript", "typescriptreact", "vue", "python", "html", "css", "rust" },
+  callback = function(event)
+    pcall(vim.treesitter.start, event.buf)
+    vim.bo[event.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+  end,
+})

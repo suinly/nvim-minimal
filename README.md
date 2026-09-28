@@ -17,6 +17,8 @@ lua/
     tools.lua             — Git diff и Mason
 lsp/
   rust_analyzer.lua       — команда, типы файлов и корневые маркеры Rust LSP
+after/lsp/
+  vtsls.lua               — TypeScript и Vue-плагин поверх настроек nvim-lspconfig
 nvim-pack-lock.json        — зафиксированные версии плагинов
 lazygit.yml               — открытие файлов в текущем Neovim из LazyGit
 ```
@@ -33,8 +35,16 @@ lazygit.yml               — открытие файлов в текущем Ne
 `q` скрывает LazyGit; повторный `<leader>gg` сохраняет выбранный файл, панель и позицию прокрутки.
 Состояние сохраняется отдельно для каждого рабочего каталога в пределах текущего сеанса Neovim. `Ctrl+c` завершает LazyGit.
 Несохранённые изменения требуют подтверждения перед закрытием.
-Перед сохранением файл форматируется первым доступным LSP с поддержкой форматирования.
-Без такого сервера файл сохраняется как обычно. `scrolloff = 5` оставляет контекст вокруг курсора.
+Vue, JavaScript и TypeScript используют `vtsls`, Vue дополнительно использует `vue_ls`.
+Python использует `ty` для типов и навигации, `ruff` для линтинга и code actions.
+Tree-sitter включает подсветку и отступы для этих языков, HTML, CSS и Rust.
+Перед сохранением Prettier форматирует Vue/JS/TS; Ruff сортирует импорты и форматирует Python.
+Для остальных файлов используется первый доступный LSP с поддержкой форматирования.
+Без форматтера файл сохраняется как обычно. `scrolloff = 5` оставляет контекст вокруг курсора.
+
+На новой машине установить инструменты через `:MasonInstall rust-analyzer vtsls vue-language-server ty ruff prettier tree-sitter-cli`,
+затем парсеры через `:TSInstall typescript tsx javascript vue python html css rust`. Для сборки парсеров нужен C-компилятор; для `vtsls`, Vue и Prettier — Node.js.
 
 Проверка поведения: `rtk proxy env NVIM_APPNAME=nvim-minimal nvim --headless -i NONE -u init.lua '+lua dofile("tests/editor.lua")' '+qa!'`.
 Проверка состояния LazyGit: `rtk proxy env NVIM_APPNAME=nvim-minimal nvim --headless -i NONE -u init.lua '+lua dofile("tests/lazygit.lua")'`.
+Проверка языков: `rtk proxy env NVIM_APPNAME=nvim-minimal nvim --headless -i NONE -u init.lua '+lua dofile("tests/languages.lua")' '+qa!'`.
