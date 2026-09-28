@@ -2,7 +2,6 @@ local keymap = vim.keymap.set
 
 keymap("n", "<Esc>", "<cmd>nohlsearch<CR><Esc>", { desc = "Clear search highlights" })
 
-keymap("n", "gd", vim.lsp.buf.definition, { desc = "Go to definition" })
 keymap({ "n", "x" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "LSP code action" })
 
 keymap("n", "<space>", "<Nop>")
@@ -12,6 +11,31 @@ local function project_root()
   local start = path ~= "" and path or vim.fn.getcwd()
   return vim.fs.root(start, ".git") or vim.fs.root(start, { "Cargo.toml", "package.json", "pyproject.toml" }) or vim.fn.getcwd()
 end
+keymap("n", "gd", function()
+  local root = project_root()
+  root = vim.uv.fs_realpath(root) or root
+  vim.lsp.buf.definition({ on_list = function(list)
+    local unique, local_items, seen = {}, {}, {}
+    for _, item in ipairs(list.items) do
+      local path = item.filename or vim.api.nvim_buf_get_name(item.bufnr)
+      path = vim.uv.fs_realpath(path) or vim.fs.normalize(path)
+      local id = path .. ":" .. item.lnum .. ":" .. item.col
+      if not seen[id] then
+        seen[id] = true
+        unique[#unique + 1] = item
+        if vim.fs.relpath(root, path) then local_items[#local_items + 1] = item end
+      end
+    end
+    list.items = #local_items > 0 and local_items or unique
+    vim.fn.setqflist({}, " ", list)
+    if #list.items == 1 then
+      vim.cmd.cclose()
+      vim.cmd.cfirst()
+    else
+      vim.cmd("botright copen")
+    end
+  end })
+end, { desc = "Go to definition" })
 keymap("n", "<leader>e", function()
   local path = vim.api.nvim_buf_get_name(0)
   local target = vim.bo.buftype == "" and vim.fn.filereadable(path) == 1 and path or project_root()
