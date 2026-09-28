@@ -148,7 +148,15 @@ vim.api.nvim_create_autocmd("SessionLoadPost", {
 
 -- Statuscolumn
 vim.pack.add({ "https://github.com/nvim-mini/mini.statuscolumn" })
-require("mini.statuscolumn").setup({ dim_inactive = false })
+local statuscolumn = require("mini.statuscolumn")
+statuscolumn.setup({
+  dim_inactive = false,
+  content = statuscolumn.gen_content.main({
+    { format = "=lfs", sep = "" },
+    { ltype = "virt", lnum = "•" },
+    { ltype = "wrap", lnum = "↳" },
+  }),
+})
 
 -- Statusline
 vim.pack.add({ "https://github.com/nvim-mini/mini.statusline" })
