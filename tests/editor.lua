@@ -56,6 +56,18 @@ assert(float.relative == "editor" and float.title_pos == "center")
 assert(float.width == math.max(1, math.floor(vim.o.columns * 0.9)))
 assert(float.height == math.max(1, math.floor((vim.o.lines - 2) * 0.85)))
 assert(not vim.bo[terminal].buflisted)
+local columns, lines = vim.o.columns, vim.o.lines
+for _, size in ipairs({ { 60, 20 }, { 120, 40 } }) do
+  vim.o.columns, vim.o.lines = size[1], size[2]
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  local resized = vim.api.nvim_win_get_config(0)
+  assert(resized.width == math.max(1, math.floor(vim.o.columns * 0.9)), "LazyGit width must follow terminal size")
+  assert(resized.height == math.max(1, math.floor((vim.o.lines - 2) * 0.85)), "LazyGit height must follow terminal size")
+  assert(resized.col == math.floor((vim.o.columns - resized.width - 2) / 2))
+  assert(resized.row == math.floor((vim.o.lines - resized.height - 2) / 2))
+end
+vim.o.columns, vim.o.lines = columns, lines
+vim.api.nvim_exec_autocmds("VimResized", {})
 local herdr = require("herdr-splits")
 for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) do
   local method = "move_cursor_" .. direction
@@ -66,6 +78,17 @@ for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) d
   mapping.callback()
   assert(called, method)
   herdr[method] = original
+  local backend = require("herdr-splits.herdr")
+  local resize_pane, resized = backend.resize_pane, false
+  backend.resize_pane = function(actual_direction, amount)
+    assert(actual_direction == direction and amount > 0)
+    resized = true
+  end
+  local resize_mapping = vim.fn.maparg("<M-" .. key .. ">", "t", false, true)
+  assert(resize_mapping.buffer == 1, "Missing LazyGit resize mapping: " .. key)
+  resize_mapping.callback()
+  backend.resize_pane = resize_pane
+  assert(resized and vim.api.nvim_get_current_buf() == terminal)
 end
 for _, win in ipairs(windows) do assert(vim.api.nvim_win_is_valid(win)) end
 -- A buffer change can wipe the terminal before the scheduled exit callback.

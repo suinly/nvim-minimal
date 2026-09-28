@@ -3,6 +3,7 @@ local keymap = vim.keymap.set
 keymap("n", "<Esc>", "<cmd>nohlsearch<CR><Esc>", { desc = "Clear search highlights" })
 
 keymap("n", "gd", vim.lsp.buf.definition, { desc = "Go to definition" })
+keymap({ "n", "x" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "LSP code action" })
 
 keymap("n", "<space>", "<Nop>")
 
@@ -28,28 +29,41 @@ keymap("n", "<leader>bo", function()
 end, { desc = "Close other buffers" })
 keymap("n", "<leader>gg", function()
   local buf = vim.api.nvim_create_buf(false, true)
-  local width = math.max(1, math.floor(vim.o.columns * 0.9))
-  local height = math.max(1, math.floor((vim.o.lines - 2) * 0.85))
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    width = width,
-    height = height,
-    col = math.floor((vim.o.columns - width - 2) / 2),
-    row = math.floor((vim.o.lines - height - 2) / 2),
-    style = "minimal",
-    border = "rounded",
-    title = " Lazygit ",
-    title_pos = "center",
+  local function window_config()
+    local width = math.max(1, math.floor(vim.o.columns * 0.9))
+    local height = math.max(1, math.floor((vim.o.lines - 2) * 0.85))
+    return {
+      relative = "editor",
+      width = width,
+      height = height,
+      col = math.floor((vim.o.columns - width - 2) / 2),
+      row = math.floor((vim.o.lines - height - 2) / 2),
+      style = "minimal",
+      border = "rounded",
+      title = " Lazygit ",
+      title_pos = "center",
+    }
+  end
+  local win = vim.api.nvim_open_win(buf, true, window_config())
+  local resize_autocmd = vim.api.nvim_create_autocmd("VimResized", {
+    callback = function()
+      if not vim.api.nvim_win_is_valid(win) then return true end
+      vim.api.nvim_win_set_config(win, window_config())
+    end,
   })
   vim.bo[buf].bufhidden = "wipe"
   for key, direction in pairs({ h = "left", j = "down", k = "up", l = "right" }) do
     keymap("t", "<C-" .. key .. ">", function()
       require("herdr-splits")["move_cursor_" .. direction]()
     end, { buffer = buf, desc = "Herdr: " .. direction })
+    keymap("t", "<M-" .. key .. ">", function()
+      require("herdr-splits")["resize_" .. direction]()
+    end, { buffer = buf, desc = "Herdr resize: " .. direction })
   end
   vim.fn.jobstart({ "lazygit" }, {
     term = true,
     on_exit = vim.schedule_wrap(function()
+      pcall(vim.api.nvim_del_autocmd, resize_autocmd)
       if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
       if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
     end),
