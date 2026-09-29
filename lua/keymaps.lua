@@ -3,6 +3,7 @@ local keymap = vim.keymap.set
 keymap("n", "<Esc>", "<cmd>nohlsearch<CR><Esc>", { desc = "Clear search highlights" })
 
 keymap({ "n", "x" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "LSP code action" })
+keymap("n", "<leader>cr", vim.lsp.buf.rename, { desc = "LSP rename" })
 
 keymap("n", "<space>", "<Nop>")
 
@@ -50,9 +51,11 @@ keymap("n", "<leader>r", "<cmd>restart<CR>", { desc = "Restart Neovim" })
 keymap("n", "<leader>ff", "<cmd>Pick files<CR>", { desc = "Find files" })
 keymap("n", "<leader>fg", "<cmd>Pick grep_live<CR>", { desc = "Search text" })
 keymap("n", "<leader>fb", "<cmd>Pick buffers<CR>", { desc = "Find buffers" })
-keymap("n", "<leader>d", function()
+local function line_diagnostics()
   vim.diagnostic.open_float({ scope = "line", border = "rounded", source = "always" })
-end, { desc = "Line diagnostics" })
+end
+keymap("n", "<leader>d", line_diagnostics, { desc = "Line diagnostics" })
+keymap("n", "<leader>cd", line_diagnostics, { desc = "Line diagnostics" })
 keymap("n", "<leader>fd", vim.diagnostic.setqflist, { desc = "All diagnostics" })
 keymap("n", "<leader>bd", function() MiniBufremove.delete() end, { desc = "Close buffer" })
 keymap("n", "<leader>bo", function()

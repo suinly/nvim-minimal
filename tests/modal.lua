@@ -1,0 +1,85 @@
+-- Run with nvim --headless -i NONE -u init.lua '+lua dofile("tests/modal.lua")' '+qa!'
+local stderr = {}
+local child = vim.fn.jobstart({ vim.v.progpath, "--embed", "--headless", "-i", "NONE", "-u", "init.lua" }, {
+  rpc = true,
+  on_stderr = function(_, lines) vim.list_extend(stderr, lines) end,
+})
+local function lua(code)
+  return vim.rpcrequest(child, "nvim_exec_lua", code, {})
+end
+local ok, err = pcall(function()
+  vim.rpcrequest(child, "nvim_ui_attach", 100, 40, { rgb = true })
+  lua('require("vim._core.ui2").enable({ msg = { targets = "msg" } }); dofile("lua/modal.lua")')
+  local function visible(kind)
+    return lua('local ui = require("vim._core.ui2"); local win = ui.wins[' .. vim.inspect(kind) .. ']; if not vim.api.nvim_win_is_valid(win) then return false end; local config = vim.api.nvim_win_get_config(win); return not config.hide and config.relative == "editor" and config.border[1] == "╭"')
+  end
+  local function contains(text)
+    return lua('local ui=require("vim._core.ui2"); return table.concat(vim.api.nvim_buf_get_lines(ui.bufs.cmd,0,-1,false),"\\n"):find(' .. vim.inspect(text) .. ',1,true) ~= nil')
+  end
+  -- UI events can deliver the warning before or after the choice prompt.
+  for _, warning_first in ipairs({ true, false }) do
+    local warning = 'ui.msg.msg_show("confirm", {{0,"confirmation warning",20}}, false, false, false, 42, "");'
+    local prompt = 'ui.cmd.cmdline_show({},0,"","[N]o, (Y)es: ",0,1,0);'
+    lua('local ui=require("vim._core.ui2"); ui.check_targets(); ' .. (warning_first and warning .. prompt or prompt .. warning))
+    assert(visible("cmd") and contains("confirmation warning") and contains("[N]o, (Y)es:"), "Warning and choices must share one window in either event order")
+    assert(not visible("dialog"), "Confirmation must not open a second window")
+    assert(lua('local ui=require("vim._core.ui2"); return vim.api.nvim_win_get_config(ui.wins.msg).hide'), "Confirmation warning must not appear at the bottom")
+    lua('require("vim._core.ui2").cmd.cmdline_hide(1,true)')
+  end
+  vim.rpcrequest(child, "nvim_input", ":echo 'test'")
+  assert(vim.wait(3000, function() return visible("cmd") end), "Command line must be a centered float: " .. lua('local ui=require("vim._core.ui2"); return vim.inspect({win=ui.wins.cmd, config=vim.api.nvim_win_get_config(ui.wins.cmd), mode=vim.api.nvim_get_mode()})'))
+  assert(lua('return vim.o.cmdheight == 0'), "Command input must not reserve a bottom row")
+  vim.rpcrequest(child, "nvim_ui_try_resize", 60, 20)
+  assert(vim.wait(3000, function()
+    return lua('local win = require("vim._core.ui2").wins.cmd; local config = vim.api.nvim_win_get_config(win); return config.width <= 56 and config.col >= 0 and config.row >= 0')
+  end), "Modal must fit a resized terminal")
+  vim.rpcrequest(child, "nvim_input", "<Esc>")
+  vim.rpcnotify(child, "nvim_exec_lua", 'vim.ui.input({ prompt = "Rename: " }, function(value) vim.g.modal_input = value end)', {})
+  assert(vim.wait(3000, function() return visible("cmd") end), "Input prompt must be a float")
+  assert(lua('return vim.o.cmdheight == 0'), "Input prompt must not reserve a bottom row")
+  vim.rpcrequest(child, "nvim_input", "new_name<CR>")
+  assert(vim.wait(3000, function() return lua('return vim.g.modal_input == "new_name"') end))
+  vim.rpcnotify(child, "nvim_exec_lua", 'local ok, result = pcall(vim.fn.confirm, "Save changes?", "&Yes\\n&No", 2); vim.g.modal_confirm = result; vim.g.confirm_ok = ok', {})
+  assert(vim.wait(3000, function() return visible("cmd") and contains("Save changes?") and lua('return require("vim._core.ui2").cmd.prompt') end), "Confirmation must show the warning immediately")
+  assert(not visible("dialog"), "Confirmation must use one frame")
+  assert(lua('return vim.o.cmdheight == 0'), "Confirmation must not reserve a bottom row")
+  vim.rpcrequest(child, "nvim_input", "y")
+  assert(vim.wait(3000, function() return lua('return vim.g.modal_confirm == 1') end), lua('return tostring(vim.g.modal_confirm)'))
+  lua('vim.cmd.enew(); vim.api.nvim_buf_set_lines(0,0,-1,false,{"unsaved text"}); vim.g.unsaved_buffer=vim.api.nvim_get_current_buf()')
+  vim.rpcnotify(child, "nvim_exec_lua", 'vim.g.buffer_deleted = MiniBufremove.delete()', {})
+  assert(vim.wait(3000, function() return visible("cmd") and contains("has unsaved changes") and lua('return require("vim._core.ui2").cmd.prompt') end), "Buffer warning must appear before any key is pressed")
+  assert(contains("[N]o, (Y)es:") and not visible("dialog"), "Buffer warning and choices must use one frame")
+  assert(lua('local ui=require("vim._core.ui2"); return vim.api.nvim_win_call(ui.wins.cmd,function() return vim.fn.line("w0") == 1 end)'), "Warning must be visible at the top of the window: " .. lua('local ui=require("vim._core.ui2"); return vim.api.nvim_win_call(ui.wins.cmd,function() return vim.inspect(vim.fn.winsaveview()) end)'))
+  assert(lua('local screen={}; for row=1,vim.o.lines do local text=""; for col=1,vim.o.columns do text=text..vim.fn.screenstring(row,col) end; screen[#screen+1]=text end; return table.concat(screen,"\\n"):find("has unsaved changes",1,true) ~= nil'), "Warning must be drawn on the screen, not just stored in its buffer")
+  lua('local cmd=require("vim._core.ui2").cmd; local show=cmd.cmdline_show; vim.g.prompt_retries=0; cmd.cmdline_show=function(...) vim.g.prompt_retries=vim.g.prompt_retries+1; return show(...) end')
+  for index, key in ipairs({ "x", "j", "?" }) do
+    vim.rpcrequest(child, "nvim_input", key)
+    assert(vim.wait(3000, function() return lua('return vim.g.prompt_retries >= ' .. index) end), "Invalid choice must reopen the prompt")
+    assert(contains("has unsaved changes"), "Invalid choice must preserve the warning")
+    assert(lua('local screen={}; for row=1,vim.o.lines do local text=""; for col=1,vim.o.columns do text=text..vim.fn.screenstring(row,col) end; screen[#screen+1]=text end; return table.concat(screen,"\\n"):find("has unsaved changes",1,true) ~= nil'), "Warning must stay drawn after an invalid choice")
+  end
+  vim.rpcrequest(child, "nvim_input", "n")
+  assert(vim.wait(3000, function() return lua('return vim.g.buffer_deleted == false') end))
+  assert(lua('return vim.api.nvim_buf_is_valid(vim.g.unsaved_buffer) and vim.bo[vim.g.unsaved_buffer].modified'))
+  vim.rpcnotify(child, "nvim_exec_lua", 'vim.ui.input({prompt="Next input: "},function() vim.g.next_input_closed=true end)', {})
+  assert(vim.wait(3000, function() return visible("cmd") and contains("Next input:") end))
+  assert(not contains("has unsaved changes"), "Completed confirmation must not leak into the next input")
+  vim.rpcrequest(child, "nvim_input", "<Esc>")
+  assert(vim.wait(3000, function() return lua('return vim.g.next_input_closed == true') end))
+  lua('vim.bo[vim.g.unsaved_buffer].modified=false')
+  vim.rpcnotify(child, "nvim_exec_lua", 'vim.ui.select({"First", "Second"}, {prompt="Action:"}, function(_, index) vim.g.modal_selection = index end)', {})
+  assert(vim.wait(3000, function() return lua('local matches=MiniPick.get_picker_matches(); return matches and matches.all and #matches.all == 2 and not MiniPick.get_picker_state().is_busy') end), "Selection must use the floating picker")
+  vim.rpcrequest(child, "nvim_input", "<C-j>")
+  assert(vim.wait(3000, function() return lua('return MiniPick.get_picker_matches().current_ind == 2') end))
+  vim.rpcrequest(child, "nvim_input", "<CR>")
+  assert(vim.wait(3000, function() return lua('return vim.g.modal_selection == 2') end))
+  lua('vim.cmd.enew()')
+  vim.rpcrequest(child, "nvim_input", "i")
+  assert(vim.wait(3000, function() return lua('return vim.api.nvim_get_mode().mode == "i"') end))
+  assert(lua('return vim.o.cmdheight == 0'), "Insert mode must not reserve a bottom row")
+  vim.rpcrequest(child, "nvim_input", "<Esc>")
+end)
+local exit = vim.fn.jobwait({ child }, 0)[1]
+vim.fn.jobstop(child)
+assert(ok, tostring(err) .. " (exit " .. exit .. "): " .. table.concat(stderr, "\n"))
+print("Modal command, input, confirmation and resize checks passed")
