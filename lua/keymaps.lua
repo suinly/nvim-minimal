@@ -51,6 +51,7 @@ keymap("n", "<leader>r", "<cmd>restart<CR>", { desc = "Restart Neovim" })
 keymap("n", "<leader>ff", "<cmd>Pick files<CR>", { desc = "Find files" })
 keymap("n", "<leader>fg", "<cmd>Pick grep_live<CR>", { desc = "Search text" })
 keymap("n", "<leader>fb", "<cmd>Pick buffers<CR>", { desc = "Find buffers" })
+keymap("n", "<leader>fn", "<cmd>enew<CR>", { desc = "New file" })
 local function line_diagnostics()
   vim.diagnostic.open_float({ scope = "line", border = "rounded", source = "always" })
 end
