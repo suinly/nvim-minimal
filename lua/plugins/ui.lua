@@ -33,6 +33,7 @@ require("catppuccin").setup({
       MiniTablineFill = { bg = colors.mantle },
       MiniTablineTabpagesection = { fg = colors.lavender, bg = colors.surface0, bold = true },
       MiniTablineTrunc = { fg = colors.overlay1, bg = colors.mantle },
+      BufferJumpHint = { fg = colors.base, bg = colors.yellow, style = { "bold" } },
     }
   end,
 })
@@ -180,13 +181,69 @@ end
 
 -- Tabline
 vim.pack.add({ "https://github.com/nvim-mini/mini.tabline" })
+local buffer_labels, buffer_choice = {}, ""
 require("mini.tabline").setup({
   tabpage_section = "right",
   format = function(buf_id, label)
     local suffix = vim.bo[buf_id].modified and "● " or ""
-    return " " .. MiniTabline.default_format(buf_id, label) .. suffix .. " "
+    local text = MiniTabline.default_format(buf_id, label)
+    local hint = buffer_labels[buf_id]
+    if hint and hint:sub(1, #buffer_choice) == buffer_choice then
+      hint = hint:sub(#buffer_choice + 1, #buffer_choice + 1)
+      text = text:gsub("^(%s*)%S+", "%1" .. hint, 1)
+    end
+    return " " .. text .. suffix .. " "
   end,
 })
+
+local make_tabline = MiniTabline.make_tabline_string
+MiniTabline.make_tabline_string = function()
+  -- Add highlights after mini.tabline has measured and truncated the labels.
+  return (make_tabline():gsub("(%%#(MiniTabline%w+)#%%(%d+)@MiniTablineSwitchBuffer@%s+)(%a)", function(prefix, group, id, letter)
+    local hint = buffer_labels[tonumber(id)]
+    if hint and hint:sub(1, #buffer_choice) == buffer_choice
+      and letter == hint:sub(#buffer_choice + 1, #buffer_choice + 1) then
+      return prefix .. "%#BufferJumpHint#" .. letter .. "%#" .. group .. "#"
+    end
+    return prefix .. letter
+  end))
+end
+
+vim.keymap.set("n", "<leader>bb", function()
+  local buffers, targets = {}, {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buflisted then buffers[#buffers + 1] = buf end
+  end
+  if #buffers == 0 then return end
+  local alphabet = "asdfghjklqwertyuiopzxcvbnm"
+  local length, capacity = 1, #alphabet
+  while capacity < #buffers do length, capacity = length + 1, capacity * #alphabet end
+  for index, buf in ipairs(buffers) do
+    local number, label = index - 1, ""
+    for _ = 1, length do
+      local digit = number % #alphabet + 1
+      label = alphabet:sub(digit, digit) .. label
+      number = math.floor(number / #alphabet)
+    end
+    buffer_labels[buf], targets[label] = label, buf
+  end
+  vim.cmd.redrawtabline()
+  vim.cmd.redraw()
+  for _ = 1, length do
+    local ok, key = pcall(vim.fn.getcharstr)
+    if not ok or #key ~= 1 or not alphabet:find(key, 1, true) then break end
+    buffer_choice = buffer_choice .. key
+    if #buffer_choice < length then
+      vim.cmd.redrawtabline()
+      vim.cmd.redraw()
+    end
+  end
+  local buf = targets[buffer_choice]
+  buffer_labels = {}
+  buffer_choice = ""
+  vim.cmd.redrawtabline()
+  if buf and vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_set_current_buf(buf) end
+end, { desc = "Jump to buffer by label" })
 
 -- Indentscope
 vim.pack.add({ "https://github.com/nvim-mini/mini.indentscope" })
