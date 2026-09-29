@@ -186,27 +186,35 @@ require("mini.tabline").setup({
   tabpage_section = "right",
   format = function(buf_id, label)
     local suffix = vim.bo[buf_id].modified and "● " or ""
-    local text = MiniTabline.default_format(buf_id, label)
-    local hint = buffer_labels[buf_id]
-    if hint and hint:sub(1, #buffer_choice) == buffer_choice then
-      hint = hint:sub(#buffer_choice + 1, #buffer_choice + 1)
-      text = text:gsub("^(%s*)%S+", "%1" .. hint, 1)
-    end
-    return " " .. text .. suffix .. " "
+    return " " .. MiniTabline.default_format(buf_id, label) .. suffix .. " "
   end,
 })
 
 local make_tabline = MiniTabline.make_tabline_string
 MiniTabline.make_tabline_string = function()
   -- Add highlights after mini.tabline has measured and truncated the labels.
-  return (make_tabline():gsub("(%%#(MiniTabline%w+)#%%(%d+)@MiniTablineSwitchBuffer@%s+)(%a)", function(prefix, group, id, letter)
+  local text = make_tabline()
+  local header = "()%%#(MiniTabline%w+)#%%(%d+)@MiniTablineSwitchBuffer@()"
+  local insertions = {}
+  for _, group, id, start in text:gmatch(header) do
     local hint = buffer_labels[tonumber(id)]
-    if hint and hint:sub(1, #buffer_choice) == buffer_choice
-      and letter == hint:sub(#buffer_choice + 1, #buffer_choice + 1) then
-      return prefix .. "%#BufferJumpHint#" .. letter .. "%#" .. group .. "#"
+    if hint and hint:sub(1, #buffer_choice) == buffer_choice then
+      local finish = text:find(header, start) or text:find("%%X", start) or (#text + 1)
+      local body = text:sub(start, finish - 1)
+      local name_start = body:match("^%s*%S+%s+()")
+      local letter = hint:sub(#buffer_choice + 1, #buffer_choice + 1)
+      local pos = name_start and body:lower():find(letter, name_start, true)
+      if pos then
+        insertions[#insertions + 1] = { start + pos - 1, group }
+      end
     end
-    return prefix .. letter
-  end))
+  end
+  for index = #insertions, 1, -1 do
+    local pos, group = unpack(insertions[index])
+    text = text:sub(1, pos - 1) .. "%#BufferJumpHint#" .. text:sub(pos, pos)
+      .. "%#" .. group .. "#" .. text:sub(pos + 1)
+  end
+  return text
 end
 
 vim.keymap.set("n", "<leader>bb", function()
@@ -218,12 +226,23 @@ vim.keymap.set("n", "<leader>bb", function()
   local alphabet = "asdfghjklqwertyuiopzxcvbnm"
   local length, capacity = 1, #alphabet
   while capacity < #buffers do length, capacity = length + 1, capacity * #alphabet end
-  for index, buf in ipairs(buffers) do
-    local number, label = index - 1, ""
-    for _ = 1, length do
-      local digit = number % #alphabet + 1
-      label = alphabet:sub(digit, digit) .. label
-      number = math.floor(number / #alphabet)
+  local next_suffix = {}
+  for _, buf in ipairs(buffers) do
+    local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":t"):lower()
+    local label
+    for letter in (name .. alphabet):gmatch("[a-z]") do
+      local number = next_suffix[letter] or 0
+      if number < capacity / #alphabet then
+        next_suffix[letter] = number + 1
+        local suffix = ""
+        for _ = 2, length do
+          local digit = number % #alphabet + 1
+          suffix = alphabet:sub(digit, digit) .. suffix
+          number = math.floor(number / #alphabet)
+        end
+        label = letter .. suffix
+        break
+      end
     end
     buffer_labels[buf], targets[label] = label, buf
   end
