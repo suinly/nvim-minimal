@@ -15,7 +15,29 @@ require("mini.comment").setup({
 
 -- Completion
 vim.pack.add({ "https://github.com/nvim-mini/mini.completion" })
-require("mini.completion").setup()
+require("mini.completion").setup({
+  lsp_completion = {
+    process_items = function(items, base)
+      local sorted = MiniCompletion.default_process_items(items, base)
+      if vim.bo.filetype ~= "rust" then return sorted end
+      local project, other = {}, {}
+      for _, item in ipairs(sorted) do
+        local local_import = false
+        for _, import in ipairs(item.data and item.data.imports or {}) do
+          local path = import.full_import_path
+          local root = type(path) == "string" and path:match("^([^:]+)::")
+          if root == "crate" or root == "self" or root == "super" then
+            local_import = true
+            break
+          end
+        end
+        local group = local_import and project or other
+        group[#group + 1] = item
+      end
+      return vim.list_extend(project, other)
+    end,
+  },
+})
 vim.opt.completeopt = { "menuone", "noinsert" }
 
 -- Keymap
